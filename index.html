@@ -396,9 +396,21 @@ let gostopFirstGame=true;
 const peers={},games={},chats={omok:[],alkkagi:[],gostop:[]},shown=new Set();
 
 // Send data via Firebase push/set
+const sanitizeFB = v => {
+  if (v === undefined) return null;
+  if (v === null || typeof v !== 'object') return v;
+  if (Array.isArray(v)) return v.map(sanitizeFB);
+  const o = {};
+  for (const k in v) {
+    if (Object.prototype.hasOwnProperty.call(v, k)) {
+      o[k] = sanitizeFB(v[k]);
+    }
+  }
+  return o;
+};
 const send=(type,data={}) => {
   if (!me) return;
-  netRef.push({type, data, sender: me.id, ts: Date.now()});
+  netRef.push(sanitizeFB({type, data, sender: me.id, ts: Date.now()}));
 };
 
 // Listen to Firebase child added
@@ -410,7 +422,7 @@ netRef.limitToLast(50).on('child_added', snapshot => {
 const users=()=>me?[me,...Object.values(peers)]:Object.values(peers);
 const inRoom=r=>users().filter(u=>u.room===r).sort((a,b)=>a.joined-b.joined||a.id.localeCompare(b.id));
 const G=()=>single?sg:games[room];
-const presence=()=>me&&send('presence',{id:me.id,nick:me.nick,room:me.room,joined:me.joined,cash:me.cash});
+const presence=()=>me&&send('presence',{id:me.id,nick:me.nick,room:me.room??null,joined:me.joined,cash:me.cash??null??null});
 const pub=g=>{if(single)return;g.seq++;send('game',{room:g.kind,g})};
 let anim=null,aiMode='auto',autoLv=2,pinned=false,pickN=2,pickWin=7,inCandy=false,inTet=false;
 const tables={},declined=new Set();
@@ -512,11 +524,11 @@ function startMulti(){if(!room||inGame())return;
  if(!isOwner())return note('방 개설은 최초 접속자(방장)만 할 수 있어요.');
  const c=games[room];if(c&&c.active&&!c.result)return note('이미 게임이 진행 중이에요.');if(tables[room])return;
  if(room==='gostop'){if((me.cash||0)<1000)return showBust();openSetup('table')}else openTable(0,2,7)}
-function openTable(bet,n,winPts){const t={id:Date.now(),owner:me.id,ownerNick:me.nick,n:n||2,bet,winPts:winPts||7,players:[{id:me.id,nick:me.nick,cash:me.cash}]};tables[room]=t;send('table',{room,t});SFX.ding();ui()}
+function openTable(bet,n,winPts){const t={id:Date.now(),owner:me.id,ownerNick:me.nick,n:n||2,bet,winPts:winPts||7,players:[{id:me.id,nick:me.nick,cash:me.cash??null}]};tables[room]=t;send('table',{room,t});SFX.ding();ui()}
 function cancelTable(){const t=tables[room];if(t&&me&&t.owner===me.id){delete tables[room];send('table',{room,t:null});ui()}}
 function multiBtn(){const t=tables[room];t&&me&&t.owner===me.id?cancelTable():startMulti()}
 function joinTable(){const t=tables[room];if(!t||t.players.some(p=>p.id===me.id))return;if(room==='gostop'&&(me.cash||0)<t.bet)return note('잔액이 판돈보다 적어 참가할 수 없어요.');
- send('join',{room,tid:t.id,u:{id:me.id,nick:me.nick,cash:me.cash}});$('joinm').classList.add('hide');toast('참가 신청을 보냈어요')}
+ send('join',{room,tid:t.id,u:{id:me.id,nick:me.nick,cash:me.cash??null}});$('joinm').classList.add('hide');toast('참가 신청을 보냈어요')}
 function watchTable(){const t=tables[room];if(t)declined.add(t.id);$('joinm').classList.add('hide')}
 function tableGo(t){delete tables[room];send('table',{room,t:null});launchMulti(t.bet,t.players,{winPts:t.winPts||7})}
 function cleanTables(){if(!me)return;for(const r in tables){const t=tables[r];
