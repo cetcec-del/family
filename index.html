@@ -565,7 +565,7 @@ function showResult(g){if(shown.has(g.id))return;shown.add(g.id);const seat=sing
  for(let i=0;i<(ems.length?40:0);i++){const s=document.createElement('span');s.className='cf';s.textContent=ems[i%ems.length];s.style.left=Math.random()*100+'%';s.style.fontSize=18+Math.random()*26+'px';s.style.animationDuration=(cls==='win'?2.5:3.5)+Math.random()*2.5+'s';s.style.animationDelay=Math.random()*1.5+'s';el.appendChild(s)}
  SFX[sx]()}
 const rem={};
-function gAfter(g){return g.players.map((id,i)=>{const b0=g.cash0&&g.cash0[i]!=null?g.cash0[i]:cashOf(g,i);return b0==null?null:b0+((g.result&&g.result.pay&&g.result.pay[i])||0)})}
+function gAfter(g){return g.players.map((id,i)=>{const b0=g.cash0&&g.cash0[i]!=null?g.cash0[i]:cashOf(g,i);const res=(b0==null?null:b0+((g.result&&g.result.pay&&g.result.pay[i])||0));return res!=null?res:null})}
 function goWait(msg){games[room]=null;sg=null;single=false;anim=null;ui();draw();if(msg)note(msg)}
 function again(){$('res').classList.add('hide');const g=G();if(!g||!g.result)return;const prevW=g.result.w;
  if(g.players.some(isAIid)){let b=g.bet||0;
