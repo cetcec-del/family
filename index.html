@@ -310,36 +310,6 @@ select{font-family:inherit;font-size:17px;background:#020617;color:#f1f5f9;borde
 <div id="toast" class="hide"></div>
 <div id="bust" class="hide"><div class="bi">💸</div><div class="bt">패가망신</div><div class="bs">잔액이 모두 소진되었습니다.<br>방을 나간 뒤 다시 입장하면 100만원이 재지급됩니다.</div><button class="b-red" style="font-size:28px;padding:16px 40px" onclick="leaveRoom()">방 나가기</button></div>
 <script>
-// Firebase Initialization
-const firebaseConfig = {
-  apiKey: "AIzaSyBjYFh8e4P_QTplBRwvSkxn-Mu5u54fvEI",
-  authDomain: "family-game-eab57.firebaseapp.com",
-  databaseURL: "https://family-game-eab57-default-rtdb.firebaseio.com",
-  projectId: "family-game-eab57",
-  storageBucket: "family-game-eab57.firebasestorage.app",
-  messagingSenderId: "146857049532",
-  appId: "1:146857049532:web:bc6f95b01c5ca57ac0ffb9"
-};
-firebase.initializeApp(firebaseConfig);
-const db = firebase.database();
-const netRef = db.ref('ungcheon_games_v3');
-
-let me=null,room=null,single=false,sg=null,aiT=0,drag=null,mouse=null;
-let gostopFirstGame=true;
-const peers={},games={},chats={omok:[],alkkagi:[],gostop:[]},shown=new Set();
-
-// Send data via Firebase push/set
-const send=(type,data={}) => {
-  if (!me) return;
-  netRef.push({type, data, sender: me.id, ts: Date.now()});
-};
-
-// Listen to Firebase child added
-netRef.limitToLast(50).on('child_added', snapshot => {
-  const val = snapshot.val();
-  if (!val || !val.type) return;
-  handleMessage(val.type, val.data, val.sender);
-});
 
 
 
@@ -406,6 +376,50 @@ function pinReset(){pinned=false;const st=document.querySelector('.stage');if(st
 function toggleSnd(){const o=SFX.toggle();$('b-snd').textContent=o?'🔊':'🔇';if(o)SFX.ding()}
 document.addEventListener('pointerdown',()=>SFX.unlock(),{once:true});
 
+/* ===== 네트워크 ===== */
+// Firebase Initialization
+const firebaseConfig = {
+  apiKey: "AIzaSyBjYFh8e4P_QTplBRwvSkxn-Mu5u54fvEI",
+  authDomain: "family-game-eab57.firebaseapp.com",
+  databaseURL: "https://family-game-eab57-default-rtdb.firebaseio.com",
+  projectId: "family-game-eab57",
+  storageBucket: "family-game-eab57.firebasestorage.app",
+  messagingSenderId: "146857049532",
+  appId: "1:146857049532:web:bc6f95b01c5ca57ac0ffb9"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const netRef = db.ref('ungcheon_games_v3');
+
+let me=null,room=null,single=false,sg=null,aiT=0,drag=null,mouse=null;
+let gostopFirstGame=true;
+const peers={},games={},chats={omok:[],alkkagi:[],gostop:[]},shown=new Set();
+
+// Send data via Firebase push/set
+const send=(type,data={}) => {
+  if (!me) return;
+  netRef.push({type, data, sender: me.id, ts: Date.now()});
+};
+
+// Listen to Firebase child added
+netRef.limitToLast(50).on('child_added', snapshot => {
+  const val = snapshot.val();
+  if (!val || !val.type) return;
+  handleMessage(val.type, val.data, val.sender);
+});
+const users=()=>me?[me,...Object.values(peers)]:Object.values(peers);
+const inRoom=r=>users().filter(u=>u.room===r).sort((a,b)=>a.joined-b.joined||a.id.localeCompare(b.id));
+const G=()=>single?sg:games[room];
+const presence=()=>me&&send('presence',{id:me.id,nick:me.nick,room:me.room,joined:me.joined,cash:me.cash});
+const pub=g=>{if(single)return;g.seq++;send('game',{room:g.kind,g})};
+let anim=null,aiMode='auto',autoLv=2,pinned=false,pickN=2,pickWin=7,inCandy=false,inTet=false;
+const tables={},declined=new Set();
+const isAIid=id=>typeof id==='string'&&id.indexOf('AI')===0,aiSeat=(g,s)=>!!(single&&g&&isAIid(g.players[s]));
+const AIN=['자동AI','초보AI','중수AI','고수AI'],BETS=[1000,5000,10000,20000],STEP=1100,fmt=n=>Number(n||0).toLocaleString('ko-KR')+'원';
+const animOn=()=>!!(anim&&Date.now()<anim.end);
+function note(m,dur){const n=$('note');n.textContent=m;n.classList.remove('hide');clearTimeout(n._t);n._t=setTimeout(()=>n.classList.add('hide'),dur||5000)}
+function toast(m){const t=$('toast');t.textContent=m;t.classList.remove('hide');clearTimeout(t._t);t._t=setTimeout(()=>t.classList.add('hide'),2200)}
+
 function handleMessage(type, data, sender){
  if(sender===me?.id && type!=='hello' && type!=='need') return;
  if(type==='presence'){peers[data.id]={...data,seen:Date.now()};refresh()}
@@ -428,7 +442,6 @@ function handleMessage(type, data, sender){
    if(g.result)showResultSoon(g);else if(g.active&&same&&cur.turn!==g.turn&&g.players[g.turn]===me.id)SFX.ding();
    ui();draw()}}
 }
-
 send('hello');
 setInterval(()=>{presence();const n=Date.now();for(const k in peers)if(n-peers[k].seen>7000)delete peers[k];checkForfeit();cleanTables();refresh()},2000);
 window.addEventListener('beforeunload',e=>{if(inGame()){e.preventDefault();e.returnValue=''}});
@@ -472,7 +485,8 @@ function newGame(kind,players,names,opts){opts=opts||{};
  const g={id:Date.now(),seq:0,kind,active:true,players,names,turn:0,d:{},result:null,tEnd:kind==='alkkagi'?0:Date.now()+TLIM,first:true,rematchWinner:opts.rematchWinner,winPts:opts.winPts||7};
  ({omok:omInit,alkkagi:alInit,gostop:gsInit})[kind](g);if(kind==='gostop'&&g.d.ev)g.tEnd+=evMs(g.d.ev);return g}
 const inGame=()=>{const g=G();return !!(me&&g&&g.active&&!g.result&&(single||g.players.includes(me.id)))};
-function myTurn(){const g=G();return !!(me&&g&&g.active&&!g.result&&g.players[g.turn]===me.id&&!(g.d.busy)&&!animOn()&&!(g.kind==='gostop'&&(g.d.ask>=0||g.d.chongAsk>=0))&&!(g.kind==='gostop'&&g.d.selection))};
+/* ★ 수정 2: d.pick 조건 제거 → 패 선택 대기 중에도 클릭 반응 */
+const myTurn=()=>{const g=G();return !!(me&&g&&g.active&&!g.result&&g.players[g.turn]===me.id&&!(g.d.busy)&&!animOn()&&!(g.kind==='gostop'&&(g.d.ask>=0||g.d.chongAsk>=0))&&!(g.kind==='gostop'&&g.d.selection))};
 let SU={mode:'single',ai:'auto',n:2,win:7};
 function startSingle(){if(!room)return;cancelTable();
  if(room==='gostop'&&(me.cash||0)<1000)return showBust();
@@ -618,6 +632,9 @@ const OUT={omok:'#d9a05b',alkkagi:'#3a220b',gostop:'#10381f'};
 function draw(){if(!room)return;const g=G();ctx.setTransform(1,0,0,1,0,0);ctx.fillStyle=OUT[room]||'#10381f';ctx.fillRect(0,0,cv.width,cv.height);
  V.rot?ctx.setTransform(0,V.k,-V.k,0,V.ox+V.k*V.LH,V.oy):ctx.setTransform(V.k,0,0,V.k,V.ox,V.oy);({omok:omDraw,alkkagi:alDraw,gostop:gsDraw})[room](g&&g.kind===room?g:null)}
 
+
+
+
 /* ===== 오목 ===== */
 const OM=15,OMG=40,OMC=(600-OMG*2)/14;
 function omInit(g){g.d={b:Array.from({length:OM},()=>Array(OM).fill(0)),last:null,n:0}}
@@ -693,6 +710,9 @@ function alDraw(g){const c=ctx;c.clearRect(0,0,AW,AH);const bg=c.createLinearGra
   if(mt&&p.o===g.turn&&!p.out){c.strokeStyle='#fbbf24';c.lineWidth=3;c.stroke()}}
  if(drag&&mouse){let dx=drag.x-mouse.x,dy=drag.y-mouse.y;const l=Math.hypot(dx,dy)||1,m=Math.min(l,160);
   c.strokeStyle='#ef4444';c.lineWidth=5;c.setLineDash([8,6]);c.beginPath();c.moveTo(drag.x,drag.y);c.lineTo(drag.x+dx/l*m*2.2,drag.y+dy/l*m*2.2);c.stroke();c.setLineDash([])}}
+
+
+
 
 /* ===== 고스톱 ===== */
 const GT=['LTPP','YTPP','LTPP','YTPP','YTPP','YTPP','YTPP','LYPP','YTPP','YTPP','LQPP','LYTQ'];
@@ -813,7 +833,7 @@ function gsTurnNoHand(g,s){
  d.n++;const t=d.deck[d.deck.length-1],mt=gm(t),md=d.fl.filter(x=>gm(x)===mt);
  if(md.length===2&&!aiSeat(g,s)){
    const uniq=[...new Set(md)];
-   if(uniq.length===2&&uniq.every(x=>d.fl.includes(x))&&uniq.every(x=>gm(x)===mt)){
+   if(uniq.length===2&&uniq.every(x=>d.fl.includes(x))){
      d.deck.pop();const st=mkStep(d,s,t,null,true),pl=placeOn(d.fl,d.stk,t,null);
      st.mid=pl.l;st.smid=pl.s;st.post=pl.l.slice();st.spost={...pl.s};d.fl=pl.l.slice();d.stk={...pl.s};
      d.ev={id:Math.random(),steps:[st],fx:[]};playEv(g);
@@ -853,7 +873,7 @@ function gsFlip(g,s,cx,steps,fx,ch2){
   else if(hc==='two'&&mt===m){tg=d.fl.find(x=>gm(x)===m&&x!==c&&x!==pair[1]);cap=[...d.fl.filter(x=>gm(x)===m),t];F('따닥',steps.length)}
   else{cap=pair?pair.slice():[];const md=d.fl.filter(x=>!cap.includes(x)&&gm(x)===mt);
    if(md.length===1||md.length===2){tg=md.length===1?md[0]:(md.includes(ch2)?ch2:bestOf(md));cap.push(t,tg)}
-   else if(md.length>=3){tg=md[0];cap.push(t,...md);const ow=d.bk[mt];delete d.bk[mt];tri=ow===s?2:1;if(ow===s)F('자뻑',0);else if(ow!=null)F('뻑풀기',0);else F('폭탄',0)}}
+   else if(md.length>=3){tg=md[0];cap.push(t,...md);const ow=d.bk[mt];delete d.bk[mt];tri=ow===s?2:1;if(ow===s)F('자뻑',steps.length);else if(ow!=null)F('뻑풀기',steps.length);else F('폭탄',steps.length)}}
   const pl=placeOn(d.fl,d.stk,t,tg);s2.mid=pl.l;s2.smid=pl.s;s2.tgt=tg==null?-1:tg;
   if(cap.length){d.cap[s].push(...cap);d.fl=s2.mid.filter(x=>!cap.includes(x))}else d.fl=s2.mid.slice();d.stk={...s2.smid};
   s2.cap=cap;s2.post=d.fl.slice();s2.spost={...d.stk};steps.push(s2);
@@ -874,6 +894,7 @@ function gsPick2(g,ch){
  gsEnd(g,s,[st],[]);
 }
 
+/* ★ 수정 1: 이벤트 → 패 이동 → 점수 이동 순서 */
 function gsEnd(g,s,steps,fx){
  const d=g.d,F=(k,at)=>fx.push({k,n:g.names[s],at});
  Object.keys(d.bk).forEach(k=>{if(cntM(d.fl,+k)<3)delete d.bk[k]});
@@ -881,9 +902,11 @@ function gsEnd(g,s,steps,fx){
  if(!d.fl.length&&(d.deck.length||d.h.some(h=>h.length))){const sx=steps[steps.length-1];stealPi(d,s,sx,1);F('싹쓸이',steps.length-1)}
  d.ev={id:Math.random(),steps,fx};
  
+ // ★ 이전 점수 저장 후 새 점수 계산
  const scOld = d.sc.slice();
  d.sc=d.cap.map((cp,k)=>gsScore(cp)+d.go[k]);const sc=gsScore(d.cap[s]);let out='next';
  
+ // ★ steal 발생 시: 모션 종료 직후 바로 다음 턴 진행되도록 시간 동기화
  const hasSteal = steps.some(st => st.stealDetails && st.stealDetails.length > 0);
  if(hasSteal){
    const T = evTimes(d.ev);
@@ -1025,7 +1048,8 @@ setInterval(()=>{const g=G();if(g&&g.d&&g.d.shakeInfo&&Date.now()-g.d.shakeInfo.
 const MN=['January','February','March','April','May','June','July','August','September','October','November','December'],IM={};
 const HWX={16:'Hwatu_May_Tane.svg',32:'Hwatu_September_Tane.svg'};
 function loadHwx(){for(const id in HWX){const im=new Image();im.onload=()=>draw();im.src='https://commons.wikimedia.org/wiki/Special:FilePath/'+HWX[id]+'?width=240';IM[id]=im}}
-function loadHwatu(){if(typeof fetch!=='function')return;fetch('https://commons.wikimedia.org/w/api.php?action=query&list=allpages&apnamespace=6&apprefix=Hwatu%20&aplimit=500&format=json&origin=*').then(r=>r.json()).then(j=>{const KM={gwang:'L',yul:'Y',tti:'T',ddi:'T',pi:'P','ssang pi':'Q'},T={};j.query.allpages.forEach(p=>{const m=/^File:Hwatu (\w+) (gwang|yul|tti|ddi|ssang pi|pi)(?: (\d))?\.svg$/i.exec(p.title);if(m){const mi=MN.indexOf(m[1]);if(mi>=0)T[`${mi+1}${KM[m[2].toLowerCase()][0]}${m[3]||1}`]=p.title.slice(5)}});for(let id=0;id<48;id++){const mo=gm(id),k=gk(id);let n=0;for(let i=0;i<(id&3);i++)if(GT[mo-1][i]===k)n++;const f=T[`${mo}${k}${n+1}`];if(f&&!HWX[id]){const im=new Image();im.onload=()=>draw();im.src='https://commons.wikimedia.org/wiki/Special:FilePath/'+encodeURIComponent(f.replace(/ /g,'_'))+'?width=240';IM[id]=im}}}).catch(()=>{})}
+function loadHwatu(){if(typeof fetch!=='function')return;fetch('https://commons.wikimedia.org/w/api.php?action=query&list=allpages&apnamespace=6&apprefix=Hwatu%20&aplimit=500&format=json&origin=*').then(r=>r.json()).then(j=>{const KM={gwang:'L',yul:'Y',tti:'T',ddi:'T',pi:'P','ssang pi':'Q'},T={};j.query.allpages.forEach(p=>{const m=/^File:Hwatu (\w+) (gwang|yul|tti|ddi|ssang pi|pi)(?: (\d))?\.svg$/i.exec(p.title);if(m){const mi=MN.indexOf(m[1]);if(mi>=0)T[`${mi+1}${KM[m[2].toLowerCase()]}${m[3]||1}`]=p.title.slice(5)}});for(let id=0;id<48;id++){const mo=gm(id),k=gk(id);let n=0;for(let i=0;i<(id&3);i++)if(GT[mo-1][i]===k)n++;const f=T[`${mo}${k}${n+1}`];if(f&&!HWX[id]){const im=new Image();im.onload=()=>draw();im.src='https://commons.wikimedia.org/wiki/Special:FilePath/'+encodeURIComponent(f.replace(/ /g,'_'))+'?width=240';IM[id]=im}}}).catch(()=>{})}
+function cardImg(id){const im=IM[id];return im&&im.complete&&im.naturalWidth?im:null}
 loadHwatu();loadHwx();
 function rr(c,x,y,w,h,r){c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath()}
 function gsArt(c,m,k){c.fillStyle='#f4f1dc';c.fillRect(0,0,45,70);c.fillStyle='rgba(15,23,42,.7)';c.font='bold 9px sans-serif';c.textAlign='left';c.textBaseline='alphabetic';c.fillText(m,3,10)}
@@ -1039,6 +1063,7 @@ function gsCard(x,y,id,down,hl,s=1){const c=ctx;c.save();c.translate(x,y);c.scal
  rr(c,0,0,45,70,4);if(hl){c.lineWidth=6;c.strokeStyle='#facc15';c.shadowColor='#facc15';c.shadowBlur=12;c.stroke();c.shadowColor='transparent'}else{c.lineWidth=2.6;c.strokeStyle='#dc2626';c.stroke()}c.restore()}
 function grp(cs){const o={L:[],Y:[],T:[],P:[]};cs.slice().sort((a,b)=>a-b).forEach(i=>{const t=gk(i);o[t==='Q'?'P':t].push(i)});return o}
 let LY=null;const PHO=226,PHM=178;
+/* ★ 수정 3: 먹은 패 패널과 내 패 영역이 겹치지 않고 화면 안에 온전히 들어오도록 배치 */
 function LYT(n){const H=V.LH;
  if(V.port)return{opp:n===3?[{x:2,y:4,w:296},{x:302,y:4,w:296}]:[{x:0,y:4,w:600}],fc:{x:300,y:460,w:584,h:410},deck:{x:24,y:252},me:{x:0,y:H-300,w:600,h:178},hx:6,hw:588,hy:H-113};
  return{opp:n===3?[{x:4,y:4,w:488},{x:508,y:4,w:488}]:[{x:256,y:4,w:488}],fc:{x:500,y:349,w:900,h:226},deck:{x:24,y:250},me:{x:640,y:H-226,w:356,h:220},hx:10,hw:610,hy:H-114}}
@@ -1107,6 +1132,7 @@ function playEv(g){
 }
 let animRafId=0;
 function kickAnimLoop(){if(!animRafId&&me)animRafId=requestAnimationFrame(animLoop)}
+/* ★ 수정 2: 애니메이션 종료 후 pick UI가 남도록 한 번 더 그리기 */
 function visualTurn(g){
  if(!g||!g.active)return -1;
  if(g.kind==='gostop'){
@@ -1218,6 +1244,7 @@ function gsDraw(g){
  c.textAlign='left';c.textBaseline='alphabetic';c.fillStyle='#fff';c.font='bold 22px sans-serif';c.fillText('덱 '+d.deck.length,LY.deck.x+52,LY.deck.y+44);
  const lbl=s2=>{const id=g.players[s2];if(isAIid(id))return'💰 무제한';const v=cashOf(g,s2);return v!=null?'💰 '+fmt(v):''};
  const shakeOf=s2=>{const hist=d.shakeHistory||[];const last=hist.filter(h=>h.s===s2).pop();return last?last.ids:null};
+ /* ★ 수정 1: 표시 점수 (steal 애니메이션 중에는 이전 점수) */
  const getScDisp = s2 => {
    if(d.scDisplay && Date.now() < d.scDisplay.until) return d.scDisplay.old[s2];
    return d.sc[s2];
@@ -1281,6 +1308,9 @@ function gsDraw(g){
  }
 }
 
+
+
+
 /* ===== 캔디 블라스트 ===== */
 const LBK='ungcheon_weekly_v1',CN=8,CS=60,CT=6,CMV=25,cdv=$('cdv'),cdc=cdv.getContext('2d');
 const CCL=['#ef4444','#f59e0b','#22c55e','#3b82f6','#a855f7','#ec4899'],CCD=['#7f1d1d','#78350f','#14532d','#1e3a8a','#4c1d95','#831843'];
@@ -1313,11 +1343,12 @@ function cdBurst(c,r,t){for(let i=0;i<7;i++){const an=Math.random()*6.283,sp=120
 async function cdClear(all,make,combo){let sp=false;all.forEach(k=>{const a=CD.g[k/CN|0][k%CN];if(a){if(a.sp)sp=true;a.dying=1;cdBurst(a.c,a.fr,a.t)}});
 sp?SFX.cboom():SFX.cpop(combo);CD.score+=all.size*10*combo+make.length*30;if(combo>1)CD.msg={t:'콤보 ×'+combo+'!',u:0};await cdWait(240);all.forEach(k=>{CD.g[k/CN|0][k%CN]=null});
 make.forEach(m=>{const a=CD.g[m.r][m.c];if(a){a.sp=m.sp;if(m.sp==='bomb')a.t=-1;a.s=1.3;a.dying=0}});if(make.length)SFX.cspec()}
+async function cdPop(runs,sw,combo){const{kill,make}=cdKill(runs,sw);make.forEach(m=>kill.delete(m.r*CN+m.c));const all=cdExpand(kill);await cdClear(all,make.filter(m=>!all.has(m.r*CN+m.c)),combo)}
 function cdGrav(){for(let c=0;c<CN;c++){let w=CN-1;for(let r=CN-1;r>=0;r--){const a=CD.g[r][c];if(a){if(w!==r){CD.g[w][c]=a;CD.g[r][c]=null;a.r=w}w--}}let k=1;for(let r=w;r>=0;r--){const a=cdMk(r,c,Math.random()*CT|0);a.fr=-k;a.fc=c;k++;CD.g[r][c]=a}}}
 function cdDoSwap(a,b){const A=CD.g[a[0]][a[1]],B=CD.g[b[0]][b[1]];CD.g[a[0]][a[1]]=B;CD.g[b[0]][b[1]]=A;A.r=b[0];A.c=b[1];B.r=a[0];B.c=a[1]}
 async function cdCascade(sw){let combo=0;for(;;){const runs=cdRuns();if(!runs.length)break;combo++;CD.combo=combo;await cdPop(runs,combo===1?sw:null,combo);cdGrav();await cdSettle()}CD.combo=0}
 function cdHasMove(){for(let r=0;r<CN;r++)for(let c=0;c<CN;c++){if(CD.g[r][c].sp==='bomb')return true;for(const[dr,dc]of[[0,1],[1,0]]){const r2=r+dr,c2=c+dc;if(r2>=CN||c2>=CN)continue;const A=CD.g[r][c],B=CD.g[r2][c2];CD.g[r][c]=B;CD.g[r2][c2]=A;const ok=cdRuns().length>0;CD.g[r][c]=A;CD.g[r2][c2]=B;if(ok)return true}}return false}
-function cdShuffle(){const cs=[];CD.g.forEach(row=>row.forEach(a=>{if(a.t>=0)cs.push(a)}));for(let k=0;k<40;k++){const ts=cs.map(a=>a.t);for(let i=ts.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[ts[i],ts[j]]=[ts[j],ts[i]]cs.forEach((a,i)=>a.t=ts[i]);if(!cdRuns().length&&cdHasMove())break}cs.forEach(a=>a.s=.3)}
+function cdShuffle(){const cs=[];CD.g.forEach(row=>row.forEach(a=>{if(a.t>=0)cs.push(a)}));for(let k=0;k<40;k++){const ts=cs.map(a=>a.t);for(let i=ts.length-1;i>0;i--){const j=Math.random()*(i+1)|0;[ts[i],ts[j]]=[ts[j],ts[i]];}cs.forEach((a,i)=>a.t=ts[i]);if(!cdRuns().length&&cdHasMove())break}cs.forEach(a=>a.s=.3)}
 function cdUI(){const a=$('cd-score'),b=$('cd-moves'),c=$('cd-combo'),d=$('cd-time');if(a)a.textContent=CD.score.toLocaleString('ko-KR');if(b)b.textContent=CD.moves;if(c)c.textContent=CD.combo>1?'×'+CD.combo:'-';if(d)d.textContent=fmtT(CD.sec)}
 async function cdSwap(a,b){if(CD.busy||CD.over||CD.pause)return;CD.busy=true;CD.sel=null;const A=CD.g[a[0]][a[1]],B=CD.g[b[0]][b[1]];cdDoSwap(a,b);SFX.cswap();await cdSettle();
 if(A.sp==='bomb'||B.sp==='bomb'){CD.moves--;const bomb=A.sp==='bomb'?A:B,oth=bomb===A?B:A,bt=oth.sp==='bomb'?'all':oth.t;const all=cdExpand(new Set([A.r*CN+A.c,B.r*CN+B.c]),bt);await cdClear(all,[],1);cdGrav();await cdSettle();await cdCascade(null)}
@@ -1335,7 +1366,7 @@ if(CD.over){CD.run=false;CD.pause=false;$('cd-ov').classList.remove('hide');$('c
 function leaveCandy(){if(!inCandy)return true;if(!CD.over&&!confirm('게임이 진행 중입니다. 나가시겠습니까?'))return false;CD.left=true;CD.over=true;CD.run=false;CD.pause=false;inCandy=false;cancelAnimationFrame(CD.raf);if(me){me.room=null;presence()}$('v-candy').classList.add('hide');$('v-lobby').classList.remove('hide');lobby();return true}
 function cdResize(){const w=cdv.parentElement.clientWidth||480,sz=Math.floor(Math.min(w,Math.max(320,(window.innerHeight||800)-260))),d=Math.min(window.devicePixelRatio||1,2);cdv.style.width=sz+'px';cdv.style.height=sz+'px';cdv.style.margin='0 auto';cdv.style.display='block';cdv.style.touchAction='none';cdv.width=Math.round(sz*d);cdv.height=Math.round(sz*d)}
 window.addEventListener('resize',()=>{if(inCandy)cdResize()});
-function cdPath(c,t,x,y,r){c.beginPath();if(t===0)c.arc(x,y,r,0,6.283);else if(t===1){const q=r*.86;rr(c,x-q,y-q,2*q,2*q,r*.3)}else if(t===2){c.moveTo(x,y-r);c.lineTo(x+r*.95,y+r*.75);c.lineTo(x-r*.95,y+r*.75);c.closePath()}else if(t===3){c.moveTo(x,y-r);c.lineTo(x+r*.85,y);c.lineTo(x,y+r);c.lineTo(x-r*.85,y);c.closePath()}else if(t===4){for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,q=i%2?r*.5:r;c.lineTo(x+Math.cos(a)*q,y+Math.sin(a)*q)}c.closePath()}else{c.moveTo(x,y+r*.9);c.bezierCurveTo(x-r*1.4,y+r*.1,x-r*.7,y-r*1.0,x,y-r*.35);c.bezierCurveTo(x+r*.7,y-1.0,x+r*1.4,y+r*.1,x,y+r*.9)}}
+function cdPath(c,t,x,y,r){c.beginPath();if(t===0)c.arc(x,y,r,0,6.283);else if(t===1){const q=r*.86;rr(c,x-q,y-q,2*q,2*q,r*.3)}else if(t===2){c.moveTo(x,y-r);c.lineTo(x+r*.95,y+r*.75);c.lineTo(x-r*.95,y+r*.75);c.closePath()}else if(t===3){c.moveTo(x,y-r);c.lineTo(x+r*.85,y);c.lineTo(x,y+r);c.lineTo(x-r*.85,y);c.closePath()}else if(t===4){for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,q=i%2?r*.5:r;c.lineTo(x+Math.cos(a)*q,y+Math.sin(a)*q)}c.closePath()}else{c.moveTo(x,y+r*.9);c.bezierCurveTo(x-r*1.4,y+r*.1,x-r*.7,y-r*1.0,x,y-r*.35);c.bezierCurveTo(x+r*.7,y-r*1.0,x+r*1.4,y+r*.1,x,y+r*.9)}}
 function cdCandy(a){const c=cdc,x=(a.fc+.5)*CS,y=(a.fr+.5)*CS,r=CS*.38*Math.max(a.s,0);if(r<=0)return;
 if(a.t<0){const g=c.createRadialGradient(x-r*.3,y-r*.3,r*.1,x,y,r);g.addColorStop(0,'#fff');g.addColorStop(.5,'#6b21a8');g.addColorStop(1,'#1e1b4b');c.fillStyle=g;c.beginPath();c.arc(x,y,r,0,7);c.fill();
 ['#ef4444','#f59e0b','#22c55e','#3b82f6','#ec4899'].forEach((col,i)=>{c.fillStyle=col;const an=i*1.2566+Date.now()/700;c.beginPath();c.arc(x+Math.cos(an)*r*.62,y+Math.sin(an)*r*.62,r*.16,0,7);c.fill()});return}
@@ -1433,3 +1464,10 @@ window.addEventListener('pointerup',e=>{if(!tG)return;const g=tG,dx=e.clientX-g.
 </script>
 </body>
 </html>
+
+
+
+
+
+
+
