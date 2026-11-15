@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>웅천, 서울, 파주, 여수 침목방</title>
 <link href="https://fonts.googleapis.com/css2?family=Black+Han+Sans&family=Noto+Sans+KR:wght@400;700;900&display=swap" rel="stylesheet">
-<!-- Firebase App (core) and Firebase Realtime Database -->
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-app-compat.js"></script>
-<script src="https://www.gstatic.com/firebasejs/10.8.0/firebase-database-compat.js"></script>
 <style>
 *{box-sizing:border-box}
 body{margin:0;font-size:17px;font-family:'Noto Sans KR',sans-serif;color:#f8fafc;user-select:none;min-height:100dvh;-webkit-tap-highlight-color:transparent;padding-bottom:env(safe-area-inset-bottom);background:radial-gradient(1100px 520px at 50% -8%,#1c2550 0,#0a0f1f 62%) fixed,#0a0f1f;display:flex;flex-direction:column}
@@ -387,7 +384,24 @@ select{font-family:inherit;font-size:17px;background:#020617;color:#f1f5f9;borde
 <div class="w">
   <header class="top-nav">
     <div class="nav-left" onclick="if(me)goHome()">
-      <div class="nav-logo">🎮</div>
+      <div class="nav-logo" style="background:none;box-shadow:none;width:38px;height:38px;display:flex;align-items:center;justify-content:center;">
+  <svg width="38" height="38" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+    <path d="M447.5 136H64.5C37.8 136 16 157.8 16 184.5V327.5C16 354.2 37.8 376 64.5 376H120C136 376 150 366 156 351L179 296H333L356 351C362 366 376 376 392 376H447.5C474.2 376 496 354.2 496 327.5V184.5C496 157.8 474.2 136 447.5 136Z" fill="url(#paint0_linear)"/>
+    <path d="M128 220H100V248H128V276H156V248H184V220H156V192H128V220Z" fill="#7C3AED"/>
+    <circle cx="340" cy="234" r="14" fill="#38BDF8"/>
+    <circle cx="372" cy="202" r="14" fill="#EF4444"/>
+    <circle cx="372" cy="266" r="14" fill="#22C55E"/>
+    <circle cx="404" cy="234" r="14" fill="#FACC15"/>
+    <circle cx="210" cy="280" r="16" fill="#6D28D9"/>
+    <circle cx="302" cy="280" r="16" fill="#6D28D9"/>
+    <defs>
+      <linearGradient id="paint0_linear" x1="256" y1="136" x2="256" y2="376" gradientUnits="userSpaceOnUse">
+        <stop stop-color="#8B5CF6"/>
+        <stop offset="1" stop-color="#5B21B6"/>
+      </linearGradient>
+    </defs>
+  </svg>
+</div>
       <div>
         <div class="nav-title">웅천·서울·파주·여수 친목방</div>
       </div>
@@ -413,13 +427,13 @@ select{font-family:inherit;font-size:17px;background:#020617;color:#f1f5f9;borde
       </div>
 
       <div class="input-group">
-        <input type="text" id="in-name" placeholder="닉네임 입력" maxlength="12" autocomplete="off">
+        <input type="text" id="in-name" placeholder="닉네임 (예: 철수)" maxlength="12" autocomplete="off">
       </div>
       <div class="input-group">
-        <input type="password" id="in-pass" placeholder="비밀번호 입력" autocomplete="off">
+        <input type="password" id="in-pass" placeholder="비밀번호 (4자리)" maxlength="10" autocomplete="off">
       </div>
 
-      <button id="btn-join" class="enter-btn">친목방 입장하기 &rarr;</button>
+      <button id="btn-join" class="enter-btn">입장하기 &rarr;</button>
       <div id="err" class="error-msg"></div>
     </div>
   </section>
@@ -848,35 +862,33 @@ function toggleSoundUI(){
   if(b)b.textContent=on?'🔊':'🔇';
   if(on){SFX.unlock();SFX.ding();}
 }
-function join(name,pass){
-  name=(name||'').trim();
-  pass=(pass!==undefined?pass:($('in-pass')?$('in-pass').value:'')).trim();
+function join(){
+  const name=($('in-name').value||'').trim();
+  const pass=($('in-pass').value||'').trim();
   if(!name){$('err').textContent='닉네임을 입력하세요.';$('in-name').focus();return}
-  if(pass!=='7337'){
-    $('err').textContent='비밀번호가 올바르지 않습니다. (비밀번호: 7337)';
-    SFX.buzz();
-    if($('in-pass')){$('in-pass').value='';$('in-pass').focus();}
-    return;
-  }
+  if(pass!=='7337'){$('err').textContent='비밀번호가 일치하지 않습니다.';$('in-pass').value='';$('in-pass').focus();return}
   $('err').textContent='';
-  SFX.unlock();
-  SFX.ding();
+  try{SFX.unlock();SFX.ding();}catch(e){}
   const id=sessionStorage.getItem('ung_uid')||('u_'+Date.now().toString(36)+Math.random().toString(36).slice(2,6));
   sessionStorage.setItem('ung_uid',id);
   localStorage.setItem('ung_name',name);
   me={id,name};
   $('me-name').innerHTML=`<span style="color:${nickColor(id,name)}">${esc(name)}</span>`;
   $('me-box').classList.remove('hide');
-  meRef=presRef.child(id);
-  meRef.onDisconnect().remove();
-  meRef.set({name,loc:'lobby',t:firebase.database.ServerValue.TIMESTAMP});
-  setInterval(()=>{if(meRef&&me)meRef.update({t:firebase.database.ServerValue.TIMESTAMP})},25000);
-  bindSharedRanks();
   goHome();
+  try{
+    meRef=presRef.child(id);
+    meRef.onDisconnect().remove();
+    meRef.set({name,loc:'lobby',t:firebase.database.ServerValue.TIMESTAMP});
+    setInterval(()=>{if(meRef&&me)meRef.update({t:firebase.database.ServerValue.TIMESTAMP})},25000);
+    bindSharedRanks();
+  }catch(e){
+    console.warn('Firebase sync skipped:',e);
+  }
 }
-$('btn-join').onclick=()=>join($('in-name').value,$('in-pass').value);
+$('btn-join').onclick=()=>join();
 $('in-name').onkeydown=e=>{if(e.key==='Enter')$('in-pass').focus()};
-$('in-pass').onkeydown=e=>{if(e.key==='Enter')join($('in-name').value,$('in-pass').value)};
+$('in-pass').onkeydown=e=>{if(e.key==='Enter')join()};
 function rename(){
   const n=prompt('새 닉네임 (최대 12자)',me.name);if(!n||!n.trim())return;
   me.name=n.trim().slice(0,12);localStorage.setItem('ung_name',me.name);
