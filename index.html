@@ -1875,7 +1875,7 @@ function gsCard(x,y,id,down,hl,s=1){const c=ctx;c.save();c.translate(x,y);c.scal
  c.restore();
  rr(c,0,0,45,70,4);if(hl){c.lineWidth=6;c.strokeStyle='#facc15';c.shadowColor='#facc15';c.shadowBlur=12;c.stroke();c.shadowColor='transparent'}else{c.lineWidth=2.6;c.strokeStyle='#dc2626';c.stroke()}c.restore()}
 function grp(cs){const o={L:[],Y:[],T:[],P:[]};cs.slice().sort((a,b)=>a-b).forEach(i=>{const t=gk(i);o[t==='Q'?'P':t].push(i)});return o}
-let LY=null;const PHO=226,PHM=178;
+LY=null;const PHO=226,PHM=178;
 /* ★ 수정 3: 먹은 패 패널과 내 패 영역이 겹치지 않고 화면 안에 온전히 들어오도록 배치 */
 function LYT(n){const H=V.LH;
  if(V.port)return{opp:n===3?[{x:2,y:4,w:296},{x:302,y:4,w:296}]:[{x:0,y:4,w:600}],fc:{x:300,y:460,w:584,h:410},deck:{x:24,y:252},me:{x:0,y:H-300,w:600,h:178},hx:6,hw:588,hy:H-113};
