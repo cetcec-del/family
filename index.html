@@ -750,28 +750,7 @@ function updateLocationPresence(){
   const loc=(!$('v-lobby').classList.contains('hide'))?'lobby':(!($('v-room').classList.contains('hide'))&&curRoomId)?('room:'+curRoomId):'other';
   try{meRef.update({loc,t:firebase.database.ServerValue.TIMESTAMP})}catch(e){}
 }
-function enterCandy(){
-  if(inTet)leaveTetris(true);if(curRoomId)leave(true);
-  inCandy=true;setView('v-candy');updateLocationPresence();
-  renderRank();candyStart();
-  if(!CD.raf){CD.last=0;CD.raf=requestAnimationFrame(cdLoop)}
-}
-function leaveCandy(silent){
-  inCandy=false;CD.run=false;CD.over=true;CD.pause=false;
-  if(CD.raf){cancelAnimationFrame(CD.raf);CD.raf=0}
-  if(!silent){setView('v-lobby');lobby();updateLocationPresence();}
-}
-function enterTetris(){
-  if(inCandy)leaveCandy(true);if(curRoomId)leave(true);
-  inTet=true;setView('v-tetris');updateLocationPresence();
-  tRank();tStart();
-  if(!TT.raf){TT.last=0;TT.raf=requestAnimationFrame(tLoop)}
-}
-function leaveTetris(silent){
-  inTet=false;TT.run=false;TT.over=true;TT.pause=false;tPadStop();
-  if(TT.raf){cancelAnimationFrame(TT.raf);TT.raf=0}
-  if(!silent){setView('v-lobby');lobby();updateLocationPresence();}
-}
+
 
 let me=null,online={},allRooms={},listKind=null,curRoomId=null,curRoom=null,room=null,single=null,inCandy=false,inTet=false;
 let prevMyTurn=false,roomChatSub=null,roomNodeSub=null;
@@ -1248,13 +1227,29 @@ function pub(g){
 
 function afterStart(g){
   if(!g||!g.active||g.result)return;
+  if(g.kind==='gostop'){
+    const d=g.d;if(d.selection)return;
+    if(d.ev)playEv(g);
+    if(d.chong>=0){
+      const w=d.chong;
+      if(aiSeat(g,w)){
+        fxShow({k:'총통',n:g.names[w]});
+        finish(g,w,`${g.names[w]}님 총통!`,{tags:['총통','총통 기본 3점'],pay:gsSettle(g,w,1).pay});
+      }else{
+        d.chongAsk=w;
+        g.tEnd=Date.now()+TLIM+evMs(d.ev);
+        pub(g);ui();draw();
+      }
+    }
+    else if(g.active&&aiSeat(g,g.turn))aiT=setTimeout(aiPlay,evMs(d.ev)+500);
+    return;
+  }
   if(g.players[0]===me.id && aiSeat(g,g.turn)){
     setTimeout(()=>{
       const cur=G();if(!cur||cur!==g||!cur.active||cur.result)return;
       if(!aiSeat(cur,cur.turn))return;
       if(cur.kind==='omok')omAI(cur);
       else if(cur.kind==='alkkagi')alAI(cur);
-      else if(cur.kind==='gostop')gsAI(cur);
     },550);
   }
 }
@@ -1449,14 +1444,7 @@ function draw(){
   else if(g.kind==='alkkagi')alDraw(g);
   else if(g.kind==='gostop')gsDraw(g);
 }
-function animLoop(){
-  animRafId=0;
-  const g=G();if(!g||$('v-room').classList.contains('hide'))return;
-  draw();
-  if((g.active&&!g.result)||(g.kind==='gostop'&&g.d&&g.d.selection)||anim){
-    animRafId=requestAnimationFrame(animLoop);
-  }
-}
+
 
 /* ===== 오목 ===== */
 const OM=15,OMG=40,OMC=(600-OMG*2)/14;
@@ -1817,23 +1805,7 @@ function gsSettle(g,w,flat){const d=g.d,n=g.players.length,bet=g.bet||0;
 function gsFin(g,w,msg,fresh){const d=g.d,st=gsSettle(g,w);
  if(fresh){d.ev.fx.push(...st.fx);playEv(g)}else{d.ev={id:Math.random(),steps:[],fx:st.fx};if(st.fx.length)playEv(g)}
  finish(g,w,msg,{tags:st.tags,pay:st.pay})}
-function afterStart(g){
- if(g.kind!=='gostop')return;
- const d=g.d;if(d.selection)return;
- if(d.ev)playEv(g);
- if(d.chong>=0){
-  const w=d.chong;
-  if(aiSeat(g,w)){
-   fxShow({k:'총통',n:g.names[w]});
-   finish(g,w,`${g.names[w]}님 총통!`,{tags:['총통','총통 기본 3점'],pay:gsSettle(g,w,1).pay});
-  }else{
-   d.chongAsk=w;
-   g.tEnd=Date.now()+TLIM+evMs(d.ev);
-   pub(g);ui();draw();
-  }
- }
- else if(g.active&&aiSeat(g,g.turn))aiT=setTimeout(aiPlay,evMs(d.ev)+500);
-}
+
 function gsChongChoose(cont){
  const g=G();if(!g||!g.active)return;
  const d=g.d;if(d.chongAsk<0||d.chongAsk!==seatOf(g))return;
@@ -1971,7 +1943,6 @@ function playEv(g){
  ev.fx.forEach((f,i)=>setTimeout(()=>{if(G()===g)fxShow(f)},T.ts[i]));
  kickAnimLoop()
 }
-let animRafId=0;
 function kickAnimLoop(){if(!animRafId&&me)animRafId=requestAnimationFrame(animLoop)}
 /* ★ 수정 2: 애니메이션 종료 후 pick UI가 남도록 한 번 더 그리기 */
 function visualTurn(g){
@@ -1990,9 +1961,16 @@ function visualTurn(g){
  }
  return g.turn;
 }
+const STEP = 1150;
 function animLoop(){
  animRafId=0;
  const g=G(),now=Date.now();
+ if(!g||$('v-room').classList.contains('hide'))return;
+ if(g.kind!=='gostop'){
+  draw();
+  if((g.active&&!g.result)||anim)animRafId=requestAnimationFrame(animLoop);
+  return;
+ }
  const wasAnim=!!anim;
  const animActive=anim&&now<anim.end;if(!animActive)anim=null;
  const hasSteal=g&&g.d&&g.d.stealAnim&&g.d.stealAnim.length>0;
@@ -2234,9 +2212,23 @@ function candyStart(){if(CD.busy){toast('잠시만요');return}cdNew();CD.score=
 function candyPause(on){if(CD.over||!CD.run)return;CD.pause=on===undefined?!CD.pause:on;const o=$('cd-ov');if(CD.pause){o.classList.remove('hide');o.innerHTML='<div style="font-size:50px">⏸</div><h3 class="t" style="margin:0;font-size:34px;color:#f472b6">일시정지</h3><button class="b-grn" style="font-size:24px;padding:14px 30px" onclick="candyPause(false)">▶ 계속하기</button>';$('cb-start').textContent='▶ 계속'}else{o.classList.add('hide');$('cb-start').textContent='⏸ 일시정지';CD.t0=Date.now()-CD.sec*1000;CD.last=0}}
 function candyBtn(){if(CD.over||!CD.run)candyStart();else candyPause()}
 const CD_INTRO='<div style="font-size:50px">🍬</div><h3 class="t" style="margin:0;font-size:34px;color:#f472b6">캔디 블라스트</h3><div style="color:#cbd5e1;font-size:20px;line-height:1.6">같은 모양 3개 이상을 맞춰 터뜨리세요!</div><button class="b-grn" style="font-size:24px;padding:14px 30px" onclick="candyStart()">▶ 게임 시작</button>';
-function enterCandy(){if(!me)return;inCandy=true;me.room='candy';presence();$('v-lobby').classList.add('hide');$('v-candy').classList.remove('hide');sideSync(true);cdResize();renderRank();CD.left=false;if(CD.busy||!CD.g.length)cdNew();
-if(CD.over){CD.run=false;CD.pause=false;$('cd-ov').classList.remove('hide');$('cd-ov').innerHTML=CD_INTRO;$('cb-start').textContent='▶ 시작'}else{$('cb-start').textContent=CD.pause?'▶ 계속':'⏸ 일시정지'}cdUI();CD.last=0;if(CD.raf)cancelAnimationFrame(CD.raf);CD.raf=requestAnimationFrame(cdLoop);SFX.ding();window.scrollTo(0,0)}
-function leaveCandy(){if(!inCandy)return true;if(!CD.over&&!confirm('게임이 진행 중입니다. 나가시겠습니까?'))return false;CD.left=true;CD.over=true;CD.run=false;CD.pause=false;inCandy=false;if(CD.raf){cancelAnimationFrame(CD.raf);CD.raf=0;}if(me){me.room=null;presence()}$('v-candy').classList.add('hide');$('v-lobby').classList.remove('hide');lobby();return true}
+function enterCandy(){
+  if(!me)return;
+  if(inTet)leaveTetris(true);if(curRoomId)leave(true);
+  inCandy=true;setView('v-candy');updateLocationPresence();
+  cdResize();renderRank();CD.left=false;if(CD.busy||!CD.g.length)cdNew();
+  if(CD.over){CD.run=false;CD.pause=false;$('cd-ov').classList.remove('hide');$('cd-ov').innerHTML=CD_INTRO;$('cb-start').textContent='▶ 시작'}
+  else{$('cb-start').textContent=CD.pause?'▶ 계속':'⏸ 일시정지'}
+  cdUI();CD.last=0;if(CD.raf)cancelAnimationFrame(CD.raf);CD.raf=requestAnimationFrame(cdLoop);SFX.ding();window.scrollTo(0,0);
+}
+function leaveCandy(silent){
+  if(!inCandy)return true;
+  if(!silent&&!CD.over&&!confirm('게임이 진행 중입니다. 나가시겠습니까?'))return false;
+  CD.left=true;CD.over=true;CD.run=false;CD.pause=false;inCandy=false;
+  if(CD.raf){cancelAnimationFrame(CD.raf);CD.raf=0;}
+  if(!silent){setView('v-lobby');lobby();updateLocationPresence();}
+  return true;
+}
 function cdResize(){const w=cdv.parentElement.clientWidth||480,sz=Math.floor(Math.min(w,Math.max(320,(window.innerHeight||800)-260))),d=Math.min(window.devicePixelRatio||1,2);cdv.style.width=sz+'px';cdv.style.height=sz+'px';cdv.style.margin='0 auto';cdv.style.display='block';cdv.style.touchAction='none';cdv.width=Math.round(sz*d);cdv.height=Math.round(sz*d)}
 window.addEventListener('resize',()=>{if(inCandy)cdResize()});
 function cdPath(c,t,x,y,r){c.beginPath();if(t===0)c.arc(x,y,r,0,6.283);else if(t===1){const q=r*.86;rr(c,x-q,y-q,2*q,2*q,r*.3)}else if(t===2){c.moveTo(x,y-r);c.lineTo(x+r*.95,y+r*.75);c.lineTo(x-r*.95,y+r*.75);c.closePath()}else if(t===3){c.moveTo(x,y-r);c.lineTo(x+r*.85,y);c.lineTo(x,y+r);c.lineTo(x-r*.85,y);c.closePath()}else if(t===4){for(let i=0;i<10;i++){const a=i*Math.PI/5-Math.PI/2,q=i%2?r*.5:r;c.lineTo(x+Math.cos(a)*q,y+Math.sin(a)*q)}c.closePath()}else{c.moveTo(x,y+r*.9);c.bezierCurveTo(x-r*1.4,y+r*.1,x-r*.7,y-r*1.0,x,y-r*.35);c.bezierCurveTo(x+r*.7,y-r*1.0,x+r*1.4,y+r*.1,x,y+r*.9)}}
@@ -2299,8 +2291,24 @@ function tUI(){const a=$('tt-score'),b=$('tt-lines'),c=$('tt-level'),d=$('tt-tim
 function tRank(){const a=$('tt-list'),b=$('tt-lbl');if(a)a.innerHTML=lbHTML(TKEY);if(b)b.textContent=wkRange()}
 function tetrisCard(){return `<div class="gc"><div class="hd" style="background:linear-gradient(135deg,#06b6d455,#0f172a)"><h3 class="t" style="margin:0;font-size:31px;color:#22d3ee">🧱 테트리스</h3><small style="color:#94a3b8">블록을 쌓아 줄을 지우는 클래식</small></div><div class="bd"><div class="row" style="justify-content:space-between;font-size:16px;color:#94a3b8"><span>🏆 주간 순위 (${wkRange()})</span></div><div class="ul">${lbHTML(TKEY)}</div><button style="background:#0891b2;padding:11px" onclick="enterTetris()">플레이하기 →</button></div></div>`}
 const TT_INTRO='<div style="font-size:50px">🧱</div><h3 class="t" style="margin:0;font-size:34px;color:#22d3ee">테트리스</h3><div style="color:#cbd5e1;font-size:19px;line-height:1.6">줄을 가득 채워 지우세요!</div><button class="b-grn" style="font-size:24px;padding:14px 30px" onclick="tetStart()">▶ 게임 시작</button>';
-function enterTetris(){if(!me)return;inTet=true;me.room='tetris';presence();$('v-lobby').classList.add('hide');$('v-tetris').classList.remove('hide');sideSync(true);ttResize();tRank();TT.left=false;if(TT.over){tNew();$('tt-ov').classList.remove('hide');$('tt-ov').innerHTML=TT_INTRO;$('tb-start').textContent='▶ 시작'}tUI();TT.last=0;if(TT.raf)cancelAnimationFrame(TT.raf);TT.raf=requestAnimationFrame(tLoop);SFX.ding();setTimeout(ttResize,30);setTimeout(ttScrollIntoView,40);window.scrollTo(0,0)}
-function leaveTetris(){if(!inTet)return true;if(!TT.over&&TT.run&&!confirm('게임이 진행 중입니다. 나가시겠습니까?'))return false;TT.left=true;TT.over=true;TT.run=false;inTet=false;if(TT.raf){cancelAnimationFrame(TT.raf);TT.raf=0;}tPadStop();if(me){me.room=null;presence()}$('v-tetris').classList.add('hide');$('v-lobby').classList.remove('hide');lobby();return true}
+function enterTetris(){
+  if(!me)return;
+  if(inCandy)leaveCandy(true);if(curRoomId)leave(true);
+  inTet=true;setView('v-tetris');updateLocationPresence();
+  ttResize();tRank();TT.left=false;
+  if(TT.over){tNew();$('tt-ov').classList.remove('hide');$('tt-ov').innerHTML=TT_INTRO;$('tb-start').textContent='▶ 시작'}
+  tUI();TT.last=0;if(TT.raf)cancelAnimationFrame(TT.raf);TT.raf=requestAnimationFrame(tLoop);SFX.ding();
+  setTimeout(ttResize,30);setTimeout(ttScrollIntoView,40);window.scrollTo(0,0);
+}
+function leaveTetris(silent){
+  if(!inTet)return true;
+  if(!silent&&!TT.over&&TT.run&&!confirm('게임이 진행 중입니다. 나가시겠습니까?'))return false;
+  TT.left=true;TT.over=true;TT.run=false;inTet=false;
+  if(TT.raf){cancelAnimationFrame(TT.raf);TT.raf=0;}
+  tPadStop();
+  if(!silent){setView('v-lobby');lobby();updateLocationPresence();}
+  return true;
+}
 function tDraw(){const c=ttc,W=TPW,H=TPH;const k=ttv.width/W;c.setTransform(k,0,0,k,0,0);c.clearRect(0,0,W,H);const bg=c.createLinearGradient(0,0,0,H);bg.addColorStop(0,'#111b3a');bg.addColorStop(1,'#080d1d');c.fillStyle=bg;rr(c,0,0,W,H,14);c.fill();c.fillStyle='#070c1c';rr(c,0,0,W,H,10);c.fill();
 c.strokeStyle='rgba(255,255,255,.12)';c.lineWidth=1;for(let i=0;i<=TW;i++){c.beginPath();c.moveTo(BOARD_X+i*TCS,0);c.lineTo(BOARD_X+i*TCS,TH*TCS);c.stroke()}for(let i=0;i<=TH;i++){c.beginPath();c.moveTo(BOARD_X,i*TCS);c.lineTo(BOARD_X+TW*TCS,i*TCS);c.stroke()}
 c.strokeStyle='rgba(56, 189, 248, 0.65)';c.lineWidth=2.5;c.strokeRect(BOARD_X, 0, TW*TCS, TH*TCS);
